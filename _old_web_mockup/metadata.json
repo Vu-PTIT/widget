@@ -1,0 +1,5 @@
+{
+  "name": "Echo Widget",
+  "description": "Nghe thấy nhau ngay cả khi không chạm. Gửi lời thì thầm trực tiếp từ màn hình chính.",
+  "requestFramePermissions": []
+}

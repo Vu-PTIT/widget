@@ -1,0 +1,34 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css";
+
+/* Platform-specific font families */
+@media android {
+  :root {
+    --font-mono: monospace;
+    --font-rounded: normal;
+    --font-serif: serif;
+    --font-sans: normal;
+  }
+}
+
+@media ios {
+  :root {
+    --font-mono: ui-monospace;
+    --font-serif: ui-serif;
+    --font-sans: system-ui;
+    --font-rounded: ui-rounded;
+  }
+}
+
+@layer theme {
+  @theme {
+    /* Custom brand colors for Echo */
+    --color-echo-pink: #ec4899;
+    --color-echo-orange: #f97316;
+    --color-echo-purple: #818cf8;
+    --color-echo-glass: rgba(255,255,255,0.06);
+    --color-echo-glass-dark: rgba(0,0,0,0.38);
+    --color-echo-bg: #18181b;
+  }
+}

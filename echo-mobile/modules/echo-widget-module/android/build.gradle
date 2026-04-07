@@ -1,0 +1,26 @@
+buildscript {
+  repositories {
+    google()
+    mavenCentral()
+  }
+  dependencies {
+    classpath 'com.android.tools.build:gradle:8.7.2'
+  }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+
+group = 'expo.modules.echowidgetmodule'
+version = '0.7.10'
+
+android {
+  namespace "expo.modules.echowidgetmodule"
+  defaultConfig {
+    versionCode 1
+    versionName "0.7.10"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
