@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import messages
+from app.routers import messages, users, friends, stories, soundboard
 
 app = FastAPI(
     title="Echo API",
@@ -18,6 +18,10 @@ app.add_middleware(
 )
 
 app.include_router(messages.router)
+app.include_router(users.router)
+app.include_router(friends.router)
+app.include_router(stories.router)
+app.include_router(soundboard.router)
 
 @app.get("/")
 async def root():
