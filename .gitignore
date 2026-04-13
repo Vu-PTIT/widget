@@ -1,0 +1,9 @@
+test/
+tests/
+__pycache__/
+*.py[cod]
+.env
+.pytest_cache/
+node_modules/
+.DS_Store
+.agents/

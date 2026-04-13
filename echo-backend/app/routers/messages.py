@@ -1,7 +1,10 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, BackgroundTasks, HTTPException, status, Depends
+from typing import List
 from uuid import UUID
+from pydantic import BaseModel
+from supabase import Client
 from app.core.supabase_client import get_supabase
+from app.core.auth import get_current_user
 from app.models.message import MessageCreate, MessageUpdate, MessageResponse
 
 router = APIRouter(
@@ -32,28 +35,63 @@ async def notify_receiver(
     return {"status": "success", "message": "Notification dispatched and cleanup scheduled."}
 
 @router.post("/", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
-async def send_message(message: MessageCreate):
-    supabase = get_supabase()
-    response = supabase.table("messages").insert(message.model_dump()).execute()
+async def send_message(
+    message: MessageCreate, 
+    current_user_id: str = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    # Ensure the sender_id matches the authenticated user
+    if str(message.sender_id) != current_user_id:
+        raise HTTPException(status_code=403, detail="Cannot send message on behalf of another user")
+    
+    # If group message, verify membership
+    if message.group_id:
+        member_check = supabase.table("group_members").select("*").eq("group_id", str(message.group_id)).eq("user_id", current_user_id).execute()
+        if not member_check.data:
+            raise HTTPException(status_code=403, detail="Not a member of this group")
+            
+    response = supabase.table("messages").insert(message.model_dump(mode='json')).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Failed to send message")
     return response.data[0]
 
-@router.get("/{other_id}", response_model=list[MessageResponse])
-async def get_conversation(other_id: UUID, user_id: UUID):
+@router.get("/{other_id}", response_model=List[MessageResponse])
+async def get_conversation(
+    other_id: UUID,
+    current_user_id: str = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
     """
-    Get messages between 'user_id' and 'other_id'
+    Get direct messages between 'current_user_id' and 'other_id'
     """
-    supabase = get_supabase()
     response = supabase.table("messages").select("*").or_(
-        f"and(sender_id.eq.{user_id},receiver_id.eq.{other_id}),"
-        f"and(sender_id.eq.{other_id},receiver_id.eq.{user_id})"
-    ).order("created_at", descending=False).execute()
+        f"and(sender_id.eq.{current_user_id},receiver_id.eq.{other_id}),"
+        f"and(sender_id.eq.{other_id},receiver_id.eq.{current_user_id})"
+    ).is_("group_id", "null").order("created_at", descending=False).execute()
+    return response.data
+
+@router.get("/group/{group_id}", response_model=List[MessageResponse])
+async def get_group_messages(
+    group_id: UUID,
+    current_user_id: str = Depends(get_current_user),
+    supabase: Client = Depends(get_supabase)
+):
+    """
+    Get messages for a specific group
+    """
+    # Verify membership
+    member_check = supabase.table("group_members").select("*").eq("group_id", str(group_id)).eq("user_id", current_user_id).execute()
+    if not member_check.data:
+        raise HTTPException(status_code=403, detail="Not a member of this group")
+        
+    response = supabase.table("messages").select("*").eq("group_id", str(group_id)).order("created_at", descending=False).execute()
     return response.data
 
 @router.patch("/{message_id}/played", response_model=MessageResponse)
-async def mark_as_played(message_id: UUID):
-    supabase = get_supabase()
+async def mark_as_played(
+    message_id: UUID,
+    supabase: Client = Depends(get_supabase)
+):
     response = supabase.table("messages").update({"is_played": True}).eq("id", str(message_id)).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Message not found")

@@ -5,8 +5,8 @@ from enum import Enum
 from uuid import UUID
 
 class UserStatus(str, Enum):
-    ONline = "online"
-    OFFline = "offline"
+    ONLINE = "online"
+    OFFLINE = "offline"
     BUSY = "busy"
 
 class UserType(str, Enum):
@@ -18,7 +18,7 @@ class UserBase(BaseModel):
     username: Optional[str] = None
     name: Optional[str] = None
     avatar: Optional[str] = None
-    status: UserStatus = UserStatus.OFFline
+    status: UserStatus = UserStatus.OFFLINE
     streak: int = 0
     nickname: Optional[str] = None
     type: UserType = UserType.INDIVIDUAL
