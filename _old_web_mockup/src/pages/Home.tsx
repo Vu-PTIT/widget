@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Settings, UserPlus, Moon, Volume2, Palette, Users, User as UserIcon, Mic, Square, Check, X, Send, Play, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -6,6 +6,15 @@ import { useStore, User, Message, Story } from '../store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '../lib/utils';
 import React from 'react';
+import { ChatInputBar } from '../components/ChatInputBar';
+
+const VOICE_EFFECTS = [
+  { id: 'normal', icon: '🎤', label: 'Bình thường' },
+  { id: 'chipmunk', icon: '🐿️', label: 'Sóc chuột' },
+  { id: 'robot', icon: '🤖', label: 'Người máy' },
+  { id: 'deep', icon: '👹', label: 'Giọng trầm' },
+  { id: 'echo', icon: '🗣️', label: 'Tiếng vang' },
+];
 
 export default function Home() {
   const { currentUser, friends, allMessages, stories, soundboard, appTheme } = useStore(useShallow(state => ({
@@ -21,47 +30,20 @@ export default function Home() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'friends' | 'groups'>('friends');
   const [isRecordingStory, setIsRecordingStory] = useState(false);
+  const [viewingStory, setViewingStory] = useState<Story | null>(null);
 
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [pendingMessage, setPendingMessage] = useState<{type: 'voice', duration: number} | {type: 'soundboard', content: string} | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<{type: 'voice', duration: number, voiceEffect?: string} | {type: 'soundboard', content: string} | null>(null);
   const [selectedRecipients, setSelectedRecipients] = useState<string[]>([]);
   const [isSoundboardExpanded, setIsSoundboardExpanded] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const individualFriends = friends.filter(f => f.type !== 'group');
   const groups = friends.filter(f => f.type === 'group');
 
   const displayItems = activeTab === 'friends' ? individualFriends : groups;
 
-  const handleStartRecording = () => {
-    setIsRecording(true);
-    setRecordingTime(0);
-    timerRef.current = setInterval(() => {
-      setRecordingTime(prev => {
-        if (prev >= 10) {
-          handleStopRecording();
-          return 10;
-        }
-        return prev + 1;
-      });
-    }, 1000);
-  };
-
-  const handleStopRecording = () => {
-    if (!isRecording) return;
-    setIsRecording(false);
-    if (timerRef.current) clearInterval(timerRef.current);
-    
-    if (recordingTime > 0) {
-      setPendingMessage({ type: 'voice', duration: recordingTime });
-    }
-  };
-
   const handleCancelRecording = () => {
     setPendingMessage(null);
     setSelectedRecipients([]);
-    setRecordingTime(0);
   };
 
   const handleSendBroadcast = () => {
@@ -75,13 +57,13 @@ export default function Home() {
         type: pendingMessage.type,
         content: pendingMessage.type === 'soundboard' ? pendingMessage.content : 'voice_url',
         duration: pendingMessage.type === 'voice' ? pendingMessage.duration : undefined,
+        voiceEffect: pendingMessage.type === 'voice' ? pendingMessage.voiceEffect : undefined,
         timestamp: Date.now()
       });
     });
     
     setPendingMessage(null);
     setSelectedRecipients([]);
-    setRecordingTime(0);
   };
 
   const toggleRecipient = (id: string) => {
@@ -129,7 +111,7 @@ export default function Home() {
             <span className="text-[10px] text-neutral-400">Đăng tin</span>
           </button>
           {stories.map(story => (
-            <StoryCircle key={story.id} story={story} />
+            <StoryCircle key={story.id} story={story} onClick={() => setViewingStory(story)} />
           ))}
         </div>
       </div>
@@ -137,15 +119,35 @@ export default function Home() {
       {isRecordingStory && (
         <RecordStoryModal 
           onClose={() => setIsRecordingStory(false)} 
-          onSave={(duration) => {
-            addStory({ id: Date.now().toString(), userId: currentUser!.id, audioUrl: 'voice_url', duration, timestamp: Date.now() });
+          onSave={(duration, voiceEffect) => {
+            addStory({ id: Date.now().toString(), userId: currentUser!.id, audioUrl: 'voice_url', duration, voiceEffect, timestamp: Date.now() });
             setIsRecordingStory(false);
           }} 
         />
       )}
 
+      {viewingStory && (
+        <ViewStoryModal 
+          story={viewingStory} 
+          onClose={() => setViewingStory(null)} 
+          onReply={(duration, voiceEffect) => {
+            addMessage({
+              id: Date.now().toString(),
+              senderId: currentUser!.id,
+              receiverId: viewingStory.userId,
+              type: 'voice',
+              content: 'voice_url',
+              duration,
+              voiceEffect,
+              timestamp: Date.now()
+            });
+            setViewingStory(null);
+          }}
+        />
+      )}
+
       {/* Lists Container */}
-      <div className="flex-1 overflow-y-auto pb-48 -mx-2 px-2 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto pb-4 -mx-2 px-2 scrollbar-hide">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -207,85 +209,24 @@ export default function Home() {
       </div>
 
       {/* Quick Record / Send Area */}
-      <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-40 flex flex-col items-center w-full px-4">
+      <div className="mt-auto shrink-0 -mx-6 -mb-6 relative z-40">
         <AnimatePresence mode="wait">
           {!pendingMessage ? (
             <motion.div 
               key="record"
-              exit={{ opacity: 0, scale: 0.8, y: 10 }}
-              className="flex items-center justify-center gap-4"
+              exit={{ opacity: 0, y: 20 }}
             >
-              {/* Soundboard */}
-              <div className="relative">
-                {isSoundboardExpanded && (
-                  <SoundboardModal 
-                    onClose={() => setIsSoundboardExpanded(false)} 
-                    onSelect={(id) => {
-                        setPendingMessage({ type: 'soundboard', content: id });
-                        setIsSoundboardExpanded(false);
-                    }} 
-                  />
-                )}
-                <div className="flex gap-2 items-center">
-                  <div className="flex gap-2">
-                    {soundboard.slice(0, 3).map(sound => (
-                      <button 
-                        key={sound.id}
-                        onClick={() => setPendingMessage({ type: 'soundboard', content: sound.id })}
-                        className="w-12 h-12 flex-shrink-0 rounded-2xl bg-neutral-800 flex items-center justify-center text-xl hover:bg-neutral-700 hover:scale-110 transition-all active:scale-95 shadow-lg"
-                      >
-                        {sound.icon}
-                      </button>
-                    ))}
-                  </div>
-                  <button 
-                    onClick={() => setIsSoundboardExpanded(!isSoundboardExpanded)}
-                    className="w-12 h-12 flex-shrink-0 rounded-2xl bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white hover:bg-neutral-700 transition-all shadow-lg"
-                  >
-                    {isSoundboardExpanded ? <X size={20} /> : <span className="text-xl">+</span>}
-                  </button>
-                </div>
-              </div>
-
-              {/* Record Button */}
-              <div className="relative flex items-center justify-center">
-                <AnimatePresence>
-                  {isRecording && (
-                    <motion.div 
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1.5, opacity: 0.2 }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      transition={{ repeat: Infinity, duration: 1 }}
-                      className="absolute inset-0 bg-pink-500 rounded-full"
-                    />
-                  )}
-                </AnimatePresence>
-                <button
-                  onMouseDown={handleStartRecording}
-                  onMouseUp={handleStopRecording}
-                  onMouseLeave={handleStopRecording}
-                  onTouchStart={handleStartRecording}
-                  onTouchEnd={handleStopRecording}
-                  className={cn(
-                    "w-16 h-16 rounded-full flex items-center justify-center transition-all shadow-lg z-10",
-                    isRecording ? "bg-pink-600 scale-90" : "bg-pink-500 hover:scale-105"
-                  )}
-                >
-                  {isRecording ? <Square size={24} className="fill-white" /> : <Mic size={24} className="text-white" />}
-                </button>
-                {isRecording && (
-                  <div className="absolute -top-8 font-mono text-pink-500 font-bold text-sm bg-neutral-900/80 px-2 py-0.5 rounded-full backdrop-blur-sm">
-                    00:{recordingTime.toString().padStart(2, '0')}
-                  </div>
-                )}
-              </div>
+              <ChatInputBar 
+                onSendVoice={(duration, voiceEffect) => setPendingMessage({ type: 'voice', duration, voiceEffect })}
+                onSendSound={(id) => setPendingMessage({ type: 'soundboard', content: id })}
+              />
             </motion.div>
           ) : (
             <motion.div 
               key="send"
-              initial={{ opacity: 0, scale: 0.8, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="flex flex-col items-center gap-3"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-6 bg-neutral-900 rounded-t-[2rem] border-t border-neutral-800 flex flex-col items-center gap-4"
             >
               <div className="text-xs font-medium text-pink-500 bg-pink-500/10 px-3 py-1 rounded-full border border-pink-500/20 flex items-center gap-2">
                 {pendingMessage.type === 'soundboard' ? (
@@ -364,8 +305,7 @@ const FriendCard: React.FC<{ friend: User, index: number, onClick: () => void, s
       onClick={onClick}
       className={cn(
         "relative rounded-2xl bg-neutral-900 p-4 flex items-center gap-4 cursor-pointer hover:bg-neutral-800 transition-all group",
-        isSelected && "ring-2 ring-pink-500 bg-neutral-800",
-        friend.streak && friend.streak > 10 && "ring-2 ring-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.3)]"
+        isSelected && "ring-2 ring-pink-500 bg-neutral-800"
       )}
     >
       <div className="relative shrink-0">
@@ -394,7 +334,13 @@ const FriendCard: React.FC<{ friend: User, index: number, onClick: () => void, s
         </div>
         <div className="text-sm text-neutral-500 truncate">
             {latestMessage ? (
-                latestMessage.type === 'voice' ? '🎤 Tin nhắn thoại' : '🎵 Âm thanh'
+                latestMessage.type === 'voice' ? (
+                  <span className="flex items-center gap-1">
+                    {latestMessage.voiceEffect && latestMessage.voiceEffect !== 'normal' 
+                      ? VOICE_EFFECTS.find(e => e.id === latestMessage.voiceEffect)?.icon 
+                      : '🎤'} Tin nhắn thoại
+                  </span>
+                ) : '🎵 Âm thanh'
             ) : (
                 'Chưa có tin nhắn'
             )}
@@ -413,11 +359,11 @@ const FriendCard: React.FC<{ friend: User, index: number, onClick: () => void, s
   );
 };
 
-const StoryCircle: React.FC<{ story: Story }> = ({ story }) => {
+const StoryCircle: React.FC<{ story: Story, onClick?: () => void }> = ({ story, onClick }) => {
   const user = useStore(state => state.friends.find(f => f.id === story.userId) || state.currentUser);
   
   return (
-    <button className="flex flex-col items-center gap-2 shrink-0">
+    <button onClick={onClick} className="flex flex-col items-center gap-2 shrink-0">
       <div className="relative w-16 h-16 rounded-full p-0.5 bg-gradient-to-tr from-pink-500 to-orange-500 animate-spin-slow">
         <img 
           src={user?.avatar} 
@@ -430,9 +376,214 @@ const StoryCircle: React.FC<{ story: Story }> = ({ story }) => {
   );
 };
 
-const RecordStoryModal: React.FC<{ onClose: () => void, onSave: (duration: number) => void }> = ({ onClose, onSave }) => {
+const ViewStoryModal: React.FC<{ story: Story, onClose: () => void, onReply: (duration: number, voiceEffect: string) => void }> = ({ story, onClose, onReply }) => {
+  const user = useStore(state => state.friends.find(f => f.id === story.userId) || state.currentUser);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const [progress, setProgress] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [selectedVoiceEffect, setSelectedVoiceEffect] = useState('normal');
+  const [showVoiceEffects, setShowVoiceEffects] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (isPlaying) {
+      progressTimerRef.current = setInterval(() => {
+        setProgress(p => {
+          if (p >= 100) {
+            setIsPlaying(false);
+            clearInterval(progressTimerRef.current!);
+            return 100;
+          }
+          return p + (100 / (story.duration * 10)); // Update every 100ms
+        });
+      }, 100);
+    } else {
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    }
+    return () => {
+      if (progressTimerRef.current) clearInterval(progressTimerRef.current);
+    };
+  }, [isPlaying, story.duration]);
+
+  const handleStart = () => {
+    setIsPlaying(false);
+    setIsRecording(true);
+    setRecordingTime(0);
+    timerRef.current = setInterval(() => {
+      setRecordingTime(prev => {
+        if (prev >= 10) {
+          handleStop();
+          return 10;
+        }
+        return prev + 1;
+      });
+    }, 1000);
+  };
+
+  const handleStop = () => {
+    setIsRecording(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (recordingTime > 0) {
+        onReply(recordingTime, selectedVoiceEffect);
+    }
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 flex flex-col bg-black">
+      {/* Progress Bar */}
+      <div className="h-1 w-full bg-neutral-800 absolute top-0 left-0 z-10">
+        <div className="h-full bg-white transition-all duration-100 ease-linear" style={{ width: `${progress}%` }} />
+      </div>
+
+      {/* Header */}
+      <div className="p-4 flex items-center justify-between z-10 bg-gradient-to-b from-black/80 to-transparent">
+        <div className="flex items-center gap-3">
+          <img src={user?.avatar} alt={user?.name} className="w-10 h-10 rounded-full bg-neutral-800" />
+          <div>
+            <div className="font-bold text-white">{user?.name}</div>
+            <div className="text-xs text-neutral-400">
+              {story.voiceEffect && story.voiceEffect !== 'normal' && (
+                <span className="mr-1">{VOICE_EFFECTS.find(e => e.id === story.voiceEffect)?.icon}</span>
+              )}
+              {story.duration}s
+            </div>
+          </div>
+        </div>
+        <button onClick={onClose} className="w-10 h-10 rounded-full bg-black/50 flex items-center justify-center text-white backdrop-blur-md">
+          <X size={20} />
+        </button>
+      </div>
+
+      {/* Center Content (Play/Pause) */}
+      <div className="flex-1 flex items-center justify-center relative" onClick={() => setIsPlaying(!isPlaying)}>
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80 pointer-events-none" />
+        
+        {/* Visualizer */}
+        <div className="flex items-center gap-2">
+          {Array.from({ length: 20 }).map((_, i) => (
+            <motion.div 
+              key={i} 
+              animate={{ height: isPlaying ? [10, Math.max(20, Math.random() * 80), 10] : 10 }}
+              transition={{ repeat: Infinity, duration: 0.5 + Math.random() * 0.5 }}
+              className="w-2 rounded-full bg-white/80"
+            />
+          ))}
+        </div>
+
+        {!isPlaying && progress < 100 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+            <Play size={48} className="text-white fill-white opacity-80" />
+          </div>
+        )}
+      </div>
+
+      {/* Footer (Reply) */}
+      <div className="p-6 pb-10 z-10">
+        <div className="flex items-center gap-4">
+          <div className="relative flex items-center justify-center shrink-0">
+            <AnimatePresence>
+              {isRecording && (
+                <motion.div 
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1.5, opacity: 0.2 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  transition={{ repeat: Infinity, duration: 1 }}
+                  className="absolute inset-0 bg-pink-500 rounded-full"
+                />
+              )}
+            </AnimatePresence>
+            <button
+              onMouseDown={handleStart}
+              onMouseUp={handleStop}
+              onMouseLeave={handleStop}
+              onTouchStart={handleStart}
+              onTouchEnd={handleStop}
+              className={cn(
+                "relative w-16 h-16 rounded-full flex items-center justify-center transition-all z-10",
+                isRecording ? "bg-pink-500 scale-110 shadow-[0_0_30px_rgba(236,72,153,0.5)]" : "bg-white/20 hover:bg-white/30 backdrop-blur-md"
+              )}
+            >
+              {isRecording ? <Square size={24} className="text-white fill-white" /> : <Mic size={28} className="text-white" />}
+            </button>
+          </div>
+
+          {isRecording ? (
+            <motion.div 
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex-1 flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full px-6 py-3 h-16"
+            >
+              <div className="flex items-center gap-1 flex-1 overflow-hidden">
+                {Array.from({ length: 20 }).map((_, i) => (
+                  <motion.div 
+                    key={i} 
+                    animate={{ height: [4, Math.max(8, Math.random() * 32), 4] }}
+                    transition={{ repeat: Infinity, duration: 0.5 + Math.random() * 0.5 }}
+                    className="w-1 rounded-full bg-pink-500"
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-mono font-bold text-pink-500">
+                00:{recordingTime.toString().padStart(2, '0')}
+              </span>
+            </motion.div>
+          ) : (
+            <div className="flex-1 flex items-center justify-between bg-white/10 backdrop-blur-md rounded-full px-6 py-3 h-16 relative">
+              <span className="text-white/70">Nhấn giữ để trả lời...</span>
+              
+              <AnimatePresence>
+                {showVoiceEffects && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                    className="absolute bottom-full right-0 mb-4 bg-neutral-800 border border-neutral-700 rounded-2xl p-2 flex flex-col gap-1 shadow-xl z-50"
+                  >
+                    {VOICE_EFFECTS.map(effect => (
+                      <button
+                        key={effect.id}
+                        onClick={() => {
+                          setSelectedVoiceEffect(effect.id);
+                          setShowVoiceEffects(false);
+                        }}
+                        className={cn(
+                          "flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left min-w-[160px]",
+                          selectedVoiceEffect === effect.id ? "bg-pink-500/20 text-pink-500" : "hover:bg-neutral-700 text-white"
+                        )}
+                      >
+                        <span className="text-xl">{effect.icon}</span>
+                        <span className="font-medium text-sm">{effect.label}</span>
+                        {selectedVoiceEffect === effect.id && <Check size={16} className="ml-auto" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <button 
+                onClick={() => setShowVoiceEffects(!showVoiceEffects)}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center text-lg transition-all shrink-0",
+                  showVoiceEffects ? "bg-pink-500 text-white" : "bg-white/20 text-white hover:bg-white/30"
+                )}
+              >
+                {VOICE_EFFECTS.find(e => e.id === selectedVoiceEffect)?.icon || '🎤'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RecordStoryModal: React.FC<{ onClose: () => void, onSave: (duration: number, voiceEffect: string) => void }> = ({ onClose, onSave }) => {
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [selectedVoiceEffect, setSelectedVoiceEffect] = useState('normal');
+  const [showVoiceEffects, setShowVoiceEffects] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleStart = () => {
@@ -453,37 +604,81 @@ const RecordStoryModal: React.FC<{ onClose: () => void, onSave: (duration: numbe
     setIsRecording(false);
     if (timerRef.current) clearInterval(timerRef.current);
     if (recordingTime > 0) {
-        onSave(recordingTime);
+        onSave(recordingTime, selectedVoiceEffect);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div className="bg-neutral-900 w-full max-w-sm rounded-[2rem] p-6 border border-neutral-800 shadow-2xl flex flex-col items-center">
+    <div className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="bg-neutral-900 w-full max-w-sm rounded-[2rem] p-6 border border-neutral-800 shadow-2xl flex flex-col items-center relative">
             <h3 className="text-xl font-bold text-white mb-6">Ghi âm tin mới</h3>
-            <div className="relative flex items-center justify-center mb-6">
-                {isRecording && (
-                    <motion.div 
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1.5, opacity: 0.2 }}
-                        exit={{ scale: 0.8, opacity: 0 }}
-                        transition={{ repeat: Infinity, duration: 1 }}
-                        className="absolute inset-0 bg-pink-500 rounded-full"
-                    />
-                )}
-                <button
-                    onMouseDown={handleStart}
-                    onMouseUp={handleStop}
-                    onMouseLeave={handleStop}
-                    onTouchStart={handleStart}
-                    onTouchEnd={handleStop}
-                    className={cn(
-                        "relative w-24 h-24 rounded-full flex items-center justify-center transition-all z-10",
-                        isRecording ? "bg-pink-500 scale-110 shadow-[0_0_30px_rgba(236,72,153,0.5)]" : "bg-pink-500 shadow-lg"
-                    )}
+            
+            <AnimatePresence>
+              {showVoiceEffects && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.9 }}
+                  className="absolute bottom-full left-1/2 -translate-x-1/2 mb-4 bg-neutral-800 border border-neutral-700 rounded-2xl p-2 flex flex-col gap-1 shadow-xl z-50"
                 >
-                    {isRecording ? <Square size={32} className="text-white fill-white" /> : <Mic size={40} className="text-white" />}
+                  {VOICE_EFFECTS.map(effect => (
+                    <button
+                      key={effect.id}
+                      onClick={() => {
+                        setSelectedVoiceEffect(effect.id);
+                        setShowVoiceEffects(false);
+                      }}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-left min-w-[160px]",
+                        selectedVoiceEffect === effect.id ? "bg-pink-500/20 text-pink-500" : "hover:bg-neutral-700 text-white"
+                      )}
+                    >
+                      <span className="text-xl">{effect.icon}</span>
+                      <span className="font-medium text-sm">{effect.label}</span>
+                      {selectedVoiceEffect === effect.id && <Check size={16} className="ml-auto" />}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="flex items-center gap-4 mb-6">
+              <div className="relative flex items-center justify-center">
+                  {isRecording && (
+                      <motion.div 
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1.5, opacity: 0.2 }}
+                          exit={{ scale: 0.8, opacity: 0 }}
+                          transition={{ repeat: Infinity, duration: 1 }}
+                          className="absolute inset-0 bg-pink-500 rounded-full"
+                      />
+                  )}
+                  <button
+                      onMouseDown={handleStart}
+                      onMouseUp={handleStop}
+                      onMouseLeave={handleStop}
+                      onTouchStart={handleStart}
+                      onTouchEnd={handleStop}
+                      className={cn(
+                          "relative w-24 h-24 rounded-full flex items-center justify-center transition-all z-10",
+                          isRecording ? "bg-pink-500 scale-110 shadow-[0_0_30px_rgba(236,72,153,0.5)]" : "bg-pink-500 shadow-lg"
+                      )}
+                  >
+                      {isRecording ? <Square size={32} className="text-white fill-white" /> : <Mic size={40} className="text-white" />}
+                  </button>
+              </div>
+
+              {!isRecording && (
+                <button 
+                  onClick={() => setShowVoiceEffects(!showVoiceEffects)}
+                  className={cn(
+                    "w-12 h-12 rounded-full flex items-center justify-center text-xl transition-all shrink-0 shadow-lg",
+                    showVoiceEffects ? "bg-pink-500 text-white" : "bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700"
+                  )}
+                >
+                  {VOICE_EFFECTS.find(e => e.id === selectedVoiceEffect)?.icon || '🎤'}
                 </button>
+              )}
             </div>
             <p className="text-neutral-400 mb-6 font-mono">00:{recordingTime.toString().padStart(2, '0')}</p>
             <button onClick={onClose} className="w-full py-3 rounded-xl bg-neutral-800 text-white font-bold hover:bg-neutral-700">Hủy</button>
@@ -495,7 +690,7 @@ const RecordStoryModal: React.FC<{ onClose: () => void, onSave: (duration: numbe
 const SoundboardModal: React.FC<{ onClose: () => void, onSelect: (id: string) => void }> = ({ onClose, onSelect }) => {
   const soundboard = useStore(state => state.widgetConfig.soundboard);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+    <div className="absolute inset-0 z-50 flex items-end justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
         <motion.div 
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}

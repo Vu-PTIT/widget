@@ -8,7 +8,8 @@ import { cn } from '../lib/utils';
 
 export default function CreateGroup() {
   const navigate = useNavigate();
-  const friends = useStore(useShallow(state => state.friends.filter(f => f.type !== 'group')));
+  const allFriends = useStore(state => state.friends);
+  const friends = allFriends.filter(f => f.type !== 'group');
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
   

@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Search, UserPlus, QrCode, Copy, Check } from 'lucide-react';
+import { ChevronLeft, Search, UserPlus, QrCode, Copy, Check, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useStore, User } from '../store/useStore';
+import { useShallow } from 'zustand/react/shallow';
 import { cn } from '../lib/utils';
 
 export default function AddFriend() {
   const navigate = useNavigate();
   const currentUser = useStore(state => state.currentUser);
+  const allFriends = useStore(state => state.friends);
+  const friends = allFriends.filter(f => f.type !== 'group');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [foundUser, setFoundUser] = useState<User | null>(null);
   const [copied, setCopied] = useState(false);
   
   const addFriend = useStore(state => state.addFriend);
+  const removeFriend = useStore(state => state.removeFriend);
 
   const handleSearch = () => {
     if (searchQuery.length < 3) return;
@@ -60,27 +64,6 @@ export default function AddFriend() {
       </header>
 
       <div className="flex-1 flex flex-col gap-8">
-        {/* My Username Section */}
-        <div className="bg-pink-500/10 border border-pink-500/20 rounded-[2rem] p-6 flex flex-col items-center justify-center text-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-pink-500" />
-          <h2 className="text-sm font-medium text-pink-500 mb-2 uppercase tracking-wider">Username của bạn</h2>
-          <div className="text-3xl font-bold text-white mb-6">@{currentUser?.username}</div>
-          
-          <div className="flex gap-3 w-full">
-            <button 
-              onClick={handleCopy}
-              className="flex-1 bg-neutral-900 hover:bg-neutral-800 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium text-sm"
-            >
-              {copied ? <Check size={18} className="text-green-500" /> : <Copy size={18} />}
-              {copied ? 'Đã chép' : 'Sao chép'}
-            </button>
-            <button className="flex-1 bg-neutral-900 hover:bg-neutral-800 py-3 rounded-xl flex items-center justify-center gap-2 transition-colors font-medium text-sm">
-              <QrCode size={18} />
-              Mã QR
-            </button>
-          </div>
-        </div>
-
         {/* Search Section */}
         <div className="space-y-4">
           <h3 className="text-sm font-bold text-neutral-500 uppercase tracking-wider ml-2">Tìm bạn mới</h3>
@@ -137,6 +120,32 @@ export default function AddFriend() {
             </motion.div>
           )}
         </AnimatePresence>
+        {/* Friend List Section */}
+        <div className="flex-1 flex flex-col min-h-0">
+          <h3 className="text-sm font-bold text-neutral-500 uppercase tracking-wider ml-2 mb-4">Danh sách bạn bè ({friends.length})</h3>
+          <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+            {friends.map(friend => (
+              <div key={friend.id} className="bg-neutral-900 rounded-2xl p-3 flex items-center gap-3 border border-neutral-800">
+                <img src={friend.avatar} alt={friend.name} className="w-12 h-12 rounded-full bg-neutral-800 object-cover" />
+                <div className="flex-1 overflow-hidden">
+                  <h4 className="font-bold text-sm truncate">{friend.nickname || friend.name}</h4>
+                  <p className="text-xs text-neutral-500 truncate">@{friend.username}</p>
+                </div>
+                <button
+                  onClick={() => removeFriend(friend.id)}
+                  className="w-10 h-10 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500/20 transition-colors shrink-0"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+            {friends.length === 0 && (
+              <div className="text-center text-neutral-500 py-8 text-sm">
+                Bạn chưa có bạn bè nào. Hãy tìm kiếm và thêm bạn nhé!
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

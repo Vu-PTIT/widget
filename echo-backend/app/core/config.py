@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     # Supabase Configuration
     SUPABASE_URL: str = "https://your-project.supabase.co"
     SUPABASE_KEY: str = "your-anon-or-service-role-key"
+    SUPABASE_SERVICE_KEY: str = "your-service-role-key"
     
     # Firebase Configuration (for FCM)
     FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None

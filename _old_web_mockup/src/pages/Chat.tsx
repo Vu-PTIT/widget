@@ -7,6 +7,15 @@ import { useStore, Message } from '../store/useStore';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
+import { ChatInputBar } from '../components/ChatInputBar';
+
+const VOICE_EFFECTS = [
+  { id: 'normal', icon: '🎤', label: 'Bình thường' },
+  { id: 'chipmunk', icon: '🐿️', label: 'Sóc chuột' },
+  { id: 'robot', icon: '🤖', label: 'Người máy' },
+  { id: 'deep', icon: '👹', label: 'Giọng trầm' },
+  { id: 'echo', icon: '🗣️', label: 'Tiếng vang' },
+];
 
 export default function Chat() {
   const { id } = useParams();
@@ -32,11 +41,14 @@ export default function Chat() {
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [selectedVoiceEffect, setSelectedVoiceEffect] = useState('normal');
+  const [showVoiceEffects, setShowVoiceEffects] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editNickname, setEditNickname] = useState('');
   const [editAvatar, setEditAvatar] = useState('');
   const [editMembers, setEditMembers] = useState<string[]>([]);
+  const [memberSearchQuery, setMemberSearchQuery] = useState('');
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +85,7 @@ export default function Chat() {
         type: 'voice',
         content: 'voice_url',
         duration: recordingTime,
+        voiceEffect: selectedVoiceEffect,
         timestamp: Date.now()
       });
       
@@ -105,6 +118,7 @@ export default function Chat() {
     setEditNickname(friend.nickname || friend.name);
     setEditAvatar(friend.avatar);
     setEditMembers(friend.members || []);
+    setMemberSearchQuery('');
     setIsEditingProfile(true);
   };
 
@@ -167,91 +181,52 @@ export default function Chat() {
             <p>Chưa có lời thì thầm nào.</p>
           </div>
         ) : (
-          messages.map((msg) => (
-            <MessageBubble 
-              key={msg.id} 
-              message={msg} 
-              isMe={msg.senderId === currentUser?.id} 
-              soundboard={soundboard} 
-              avatar={msg.senderId === currentUser?.id ? currentUser?.avatar : friend.avatar}
-            />
-          ))
+          messages.map((msg) => {
+            const sender = msg.senderId === currentUser?.id ? currentUser : friends.find(f => f.id === msg.senderId);
+            return (
+              <MessageBubble 
+                key={msg.id} 
+                message={msg} 
+                isMe={msg.senderId === currentUser?.id} 
+                soundboard={soundboard} 
+                avatar={sender?.avatar || friend.avatar}
+                senderName={sender?.nickname || sender?.name || 'Unknown'}
+              />
+            );
+          })
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Interaction Area */}
-      <div className="p-6 bg-neutral-900 rounded-t-[2rem] border-t border-neutral-800">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="relative flex items-center justify-center shrink-0">
-            <AnimatePresence>
-              {isRecording && (
-                <motion.div 
-                  initial={{ scale: 0.8, opacity: 0 }}
-                  animate={{ scale: 1.5, opacity: 0.2 }}
-                  exit={{ scale: 0.8, opacity: 0 }}
-                  transition={{ repeat: Infinity, duration: 1 }}
-                  className="absolute inset-0 bg-pink-500 rounded-full"
-                />
-              )}
-            </AnimatePresence>
-            <button
-              onMouseDown={handleStartRecording}
-              onMouseUp={handleStopRecording}
-              onMouseLeave={handleStopRecording}
-              onTouchStart={handleStartRecording}
-              onTouchEnd={handleStopRecording}
-              className={cn(
-                "relative w-16 h-16 rounded-full flex items-center justify-center transition-all z-10",
-                isRecording ? "bg-pink-500 scale-110 shadow-[0_0_30px_rgba(236,72,153,0.5)]" : "bg-pink-500 shadow-lg"
-              )}
-            >
-              {isRecording ? <Square size={24} className="text-white fill-white" /> : <Mic size={28} className="text-white" />}
-            </button>
-          </div>
-
-          {isRecording ? (
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex-1 flex items-center gap-3 bg-neutral-800 rounded-full px-6 py-3 h-16"
-            >
-              <div className="flex items-center gap-1 flex-1 overflow-hidden">
-                {/* Fake waveform */}
-                {Array.from({ length: 30 }).map((_, i) => (
-                  <motion.div 
-                    key={i} 
-                    animate={{ height: [4, Math.max(8, Math.random() * 32), 4] }}
-                    transition={{ repeat: Infinity, duration: 0.5 + Math.random() * 0.5 }}
-                    className="w-1 rounded-full bg-pink-500"
-                  />
-                ))}
-              </div>
-              <span className="text-sm font-mono font-bold text-pink-500">
-                00:{recordingTime.toString().padStart(2, '0')}
-              </span>
-            </motion.div>
-          ) : (
-            <div className="flex-1 flex items-center justify-between">
-              <button className="w-12 h-12 rounded-full bg-neutral-800 flex items-center justify-center text-neutral-400 hover:text-white transition-colors">
-                <span className="text-xl">+</span>
-              </button>
-              
-              <div className="flex items-center gap-2">
-                {soundboard.slice(0, 4).map(sound => (
-                  <button 
-                    key={sound.id}
-                    onClick={() => handleSendSound(sound.id)}
-                    className="w-12 h-12 rounded-2xl bg-neutral-800 flex items-center justify-center text-xl hover:bg-neutral-700 hover:scale-110 transition-all active:scale-95"
-                  >
-                    {sound.icon}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      <ChatInputBar 
+        onSendVoice={(duration, voiceEffect) => {
+          addMessage({
+            id: Date.now().toString(),
+            senderId: currentUser!.id,
+            receiverId: friend.id,
+            type: 'voice',
+            content: 'voice_url',
+            duration,
+            voiceEffect,
+            timestamp: Date.now()
+          });
+          
+          // Simulate reply
+          setTimeout(() => {
+            addMessage({
+              id: (Date.now() + 1).toString(),
+              senderId: friend.id,
+              receiverId: currentUser!.id,
+              type: 'voice',
+              content: 'voice_url',
+              duration: Math.floor(Math.random() * 5) + 2,
+              timestamp: Date.now()
+            });
+          }, 2000);
+        }}
+        onSendSound={handleSendSound}
+      />
 
       {/* Edit Profile Modal */}
       <AnimatePresence>
@@ -260,7 +235,7 @@ export default function Chat() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
@@ -344,8 +319,18 @@ export default function Chat() {
                     {friend.type === 'group' && (
                       <div>
                         <label className="block text-xs font-medium text-neutral-400 mb-2 ml-1">Thành viên ({editMembers.length})</label>
+                        <input
+                          type="text"
+                          placeholder="Tìm kiếm bạn bè..."
+                          value={memberSearchQuery}
+                          onChange={(e) => setMemberSearchQuery(e.target.value)}
+                          className="w-full bg-neutral-800 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-pink-500/50 transition-all border border-transparent focus:border-pink-500/50 mb-2"
+                        />
                         <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-                          {individualFriends.map(f => (
+                          {individualFriends.filter(f => 
+                            f.name.toLowerCase().includes(memberSearchQuery.toLowerCase()) || 
+                            f.username.toLowerCase().includes(memberSearchQuery.toLowerCase())
+                          ).map(f => (
                             <div 
                               key={f.id}
                               onClick={() => {
@@ -359,9 +344,12 @@ export default function Chat() {
                               )}
                             >
                               <img src={f.avatar} alt={f.name} className="w-8 h-8 rounded-full bg-neutral-700" />
-                              <span className="flex-1 text-sm font-medium truncate">{f.name}</span>
+                              <div className="flex-1 overflow-hidden flex flex-col">
+                                <span className="text-sm font-medium truncate">{f.name}</span>
+                                <span className="text-[10px] text-neutral-500 truncate">@{f.username}</span>
+                              </div>
                               <div className={cn(
-                                "w-5 h-5 rounded-full flex items-center justify-center border",
+                                "w-5 h-5 rounded-full flex items-center justify-center border shrink-0",
                                 editMembers.includes(f.id) ? "bg-pink-500 border-pink-500" : "border-neutral-600"
                               )}>
                                 {editMembers.includes(f.id) && <Check size={12} className="text-white" />}
@@ -399,24 +387,86 @@ export default function Chat() {
   );
 }
 
-const MessageBubble: React.FC<{ message: Message, isMe: boolean, soundboard: any[], avatar?: string }> = ({ message, isMe, soundboard, avatar }) => {
+const MessageBubble: React.FC<{ message: Message, isMe: boolean, soundboard: any[], avatar?: string, senderName?: string }> = ({ message, isMe, soundboard, avatar, senderName }) => {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState<'top' | 'bottom'>('top');
+  const tooltipRef = useRef<HTMLDivElement>(null);
   const time = format(message.timestamp, 'HH:mm');
+  const exactTime = format(message.timestamp, 'dd/MM/yyyy HH:mm:ss');
   
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target as Node)) {
+        setShowTooltip(false);
+      }
+    };
+
+    if (showTooltip) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showTooltip]);
+
+  const handleToggleTooltip = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!showTooltip) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      // If the bubble is too close to the top of the screen, show tooltip below it
+      if (rect.top < 150) {
+        setTooltipPos('bottom');
+      } else {
+        setTooltipPos('top');
+      }
+    }
+    setShowTooltip(!showTooltip);
+  };
+
+  const tooltipContent = (
+    <AnimatePresence>
+      {showTooltip && (
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: tooltipPos === 'top' ? 10 : -10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: tooltipPos === 'top' ? 10 : -10 }}
+          className={cn(
+            "absolute z-50 bg-neutral-800 border border-neutral-700 shadow-xl rounded-xl p-3 text-xs min-w-[150px] cursor-default",
+            isMe ? "right-0" : "left-0",
+            tooltipPos === 'top' ? "bottom-full mb-2" : "top-full mt-2"
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="font-bold text-white mb-1">{senderName}</div>
+          <div className="text-neutral-400 mb-1">{exactTime}</div>
+          {message.type === 'voice' && (
+            <div className="text-pink-400 font-mono">Thời lượng: 00:{message.duration?.toString().padStart(2, '0')}</div>
+          )}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+
   if (message.type === 'soundboard') {
     const sound = soundboard.find(s => s.id === message.content);
     return (
       <motion.div 
+        ref={tooltipRef}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className={cn("flex flex-col", isMe ? "items-end" : "items-start")}
+        className={cn("flex flex-col relative", isMe ? "items-end" : "items-start")}
       >
         <div className={cn("flex items-end gap-2", isMe ? "flex-row-reverse" : "flex-row")}>
           <img src={avatar} alt="avatar" className="w-8 h-8 rounded-full bg-neutral-800 shrink-0" />
-          <div className={cn(
-            "text-4xl p-4 rounded-3xl",
-            isMe ? "bg-neutral-900 rounded-br-sm" : "bg-neutral-900 rounded-bl-sm"
-          )}>
+          <div 
+            onClick={handleToggleTooltip}
+            className={cn(
+              "text-4xl p-4 rounded-3xl cursor-pointer relative",
+              isMe ? "bg-neutral-900 rounded-br-sm" : "bg-neutral-900 rounded-bl-sm"
+            )}
+          >
             {sound?.icon || '❓'}
+            {tooltipContent}
           </div>
         </div>
         <span className={cn("text-[10px] text-neutral-600 mt-1", isMe ? "mr-10" : "ml-10")}>{time}</span>
@@ -426,20 +476,27 @@ const MessageBubble: React.FC<{ message: Message, isMe: boolean, soundboard: any
 
   return (
     <motion.div 
+      ref={tooltipRef}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={cn("flex flex-col", isMe ? "items-end" : "items-start")}
+      className={cn("flex flex-col relative", isMe ? "items-end" : "items-start")}
     >
       <div className={cn("flex items-end gap-2", isMe ? "flex-row-reverse" : "flex-row")}>
         <img src={avatar} alt="avatar" className="w-8 h-8 rounded-full bg-neutral-800 shrink-0" />
-        <div className={cn(
-          "flex items-center gap-3 p-3 pr-5 rounded-3xl",
-          isMe ? "bg-pink-500 text-white rounded-br-sm" : "bg-neutral-800 text-white rounded-bl-sm"
-        )}>
-          <button className={cn(
-            "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-            isMe ? "bg-white/20 hover:bg-white/30" : "bg-neutral-700 hover:bg-neutral-600"
-          )}>
+        <div 
+          onClick={handleToggleTooltip}
+          className={cn(
+            "flex items-center gap-3 p-3 pr-5 rounded-3xl cursor-pointer relative",
+            isMe ? "bg-pink-500 text-white rounded-br-sm" : "bg-neutral-800 text-white rounded-bl-sm"
+          )}
+        >
+          <button 
+            onClick={(e) => e.stopPropagation()}
+            className={cn(
+              "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
+              isMe ? "bg-white/20 hover:bg-white/30" : "bg-neutral-700 hover:bg-neutral-600"
+            )}
+          >
             <Play size={16} className={cn("ml-1", isMe ? "text-white fill-white" : "text-neutral-300 fill-neutral-300")} />
           </button>
           <div className="flex items-center gap-1">
@@ -455,6 +512,12 @@ const MessageBubble: React.FC<{ message: Message, isMe: boolean, soundboard: any
           <span className="text-xs font-mono font-medium ml-2 opacity-80">
             00:{message.duration?.toString().padStart(2, '0')}
           </span>
+          {message.voiceEffect && message.voiceEffect !== 'normal' && (
+            <span className="text-sm ml-1" title="Voice Effect">
+              {VOICE_EFFECTS.find(e => e.id === message.voiceEffect)?.icon}
+            </span>
+          )}
+          {tooltipContent}
         </div>
       </div>
       <span className={cn("text-[10px] text-neutral-600 mt-1", isMe ? "mr-10" : "ml-10")}>{time}</span>

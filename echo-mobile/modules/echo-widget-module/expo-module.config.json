@@ -1,9 +1,0 @@
-{
-  "platforms": ["apple", "android", "web"],
-  "apple": {
-    "modules": ["EchoWidgetModule"]
-  },
-  "android": {
-    "modules": ["expo.modules.echowidgetmodule.EchoWidgetModule"]
-  }
-}

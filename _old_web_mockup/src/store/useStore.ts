@@ -19,6 +19,7 @@ export type Message = {
   type: 'voice' | 'soundboard';
   content: string; // URL or sound ID
   duration?: number;
+  voiceEffect?: string;
   timestamp: number;
 };
 
@@ -27,6 +28,7 @@ export type Story = {
   userId: string;
   audioUrl: string;
   duration: number;
+  voiceEffect?: string;
   timestamp: number;
 };
 
