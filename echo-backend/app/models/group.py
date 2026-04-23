@@ -1,12 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-class GroupRole(str, Enum):
-    ADMIN = "admin"
-    MEMBER = "member"
 
 class GroupBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
@@ -22,20 +19,20 @@ class GroupUpdate(BaseModel):
     avatar: Optional[str] = None
 
 class GroupResponse(GroupBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: UUID
     created_by: Optional[UUID] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 class GroupMemberBase(BaseModel):
     group_id: UUID
     user_id: UUID
-    role: GroupRole = GroupRole.MEMBER
+
+class MemberAdd(BaseModel):
+    user_id: UUID
 
 class GroupMemberResponse(GroupMemberBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     joined_at: datetime
-
-    class Config:
-        from_attributes = True

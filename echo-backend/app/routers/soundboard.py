@@ -1,31 +1,19 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List
-from supabase import Client
-from app.core.supabase_client import get_supabase
-from app.core.auth import get_current_user
-from app.models.soundboard import SoundboardItemCreate, SoundboardItemResponse
+from fastapi import APIRouter, HTTPException, status
+from typing import List, Annotated
+from app.core.supabase_client import SupabaseClient
+from app.models.soundboard import SoundboardItemResponse
 
 router = APIRouter(
     prefix="/soundboard",
     tags=["soundboard"]
 )
 
+DEFAULT_MAX_ITEMS = 200  # Prevent runaway DB growth
+
 @router.get("/", response_model=List[SoundboardItemResponse])
 async def list_soundboard(
-    supabase: Client = Depends(get_supabase)
+    supabase: SupabaseClient
 ):
-    response = supabase.table("soundboard_items").select("*").execute()
+    response = await supabase.table("soundboard_items").select("*").limit(DEFAULT_MAX_ITEMS).execute()
     return response.data
 
-@router.post("/", response_model=SoundboardItemResponse, status_code=status.HTTP_201_CREATED)
-async def create_soundboard_item(
-    item: SoundboardItemCreate, 
-    current_user_id: str = Depends(get_current_user),
-    supabase: Client = Depends(get_supabase)
-):
-    # Only allow admin users to create soundboard items
-    # For now, just require authentication - you might want to add role checking later
-    response = supabase.table("soundboard_items").insert(item.model_dump()).execute()
-    if not response.data:
-        raise HTTPException(status_code=400, detail="Failed to create soundboard item")
-    return response.data[0]
